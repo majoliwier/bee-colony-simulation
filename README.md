@@ -10,7 +10,7 @@ Structure:
 Run (after installing dependencies):
 
 ```bash
-python -m src.cli
+python -m src.run
 ```
 
 TODO:
