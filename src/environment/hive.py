@@ -45,8 +45,13 @@ class Hive:
 
     def hatch(self, current_step: int) -> int:
         """Remove and return the number of eggs ready to hatch at `current_step`."""
-        ready = sum(1 for s in self._brood if s <= current_step)
-        self._brood = [s for s in self._brood if s > current_step]
+        remaining, ready = [], 0
+        for s in self._brood:
+            if s <= current_step:
+                ready += 1
+            else:
+                remaining.append(s)
+        self._brood = remaining
         return ready
 
     @property

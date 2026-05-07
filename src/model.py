@@ -39,6 +39,9 @@ class BeeColonyModel(Model):
         initial_foragers: int = INITIAL_FORAGERS,
         num_patches: int = NUM_FLOWER_PATCHES,
     ):
+        if width < 3 or height < 3:
+            raise ValueError(f"Grid must be at least 3×3, got {width}×{height}.")
+
         super().__init__()
         self.width = width
         self.height = height
@@ -48,6 +51,11 @@ class BeeColonyModel(Model):
 
         self.hive = Hive(HIVE_POS, INITIAL_NECTAR)
         self.flower_patches: list[FlowerPatch] = []
+        # O(1) patch lookup keyed by grid position — kept in sync with flower_patches list.
+        self._patch_index: dict[tuple, FlowerPatch] = {}
+        # Agent-type counters — kept in sync manually so callers avoid O(n) scans.
+        self.nurse_count: int = 0
+        self.forager_count: int = 0
 
         self._place_flower_patches(num_patches)
         self._spawn_initial_agents(initial_nurses, initial_foragers)
@@ -55,8 +63,8 @@ class BeeColonyModel(Model):
         self.datacollector = DataCollector(
             model_reporters={
                 "Nectar":   lambda m: round(m.hive.nectar, 1),
-                "Nurses":   lambda m: sum(1 for a in m.schedule.agents if isinstance(a, NurseAgent)),
-                "Foragers": lambda m: sum(1 for a in m.schedule.agents if isinstance(a, ForagerAgent)),
+                "Nurses":   lambda m: m.nurse_count,
+                "Foragers": lambda m: m.forager_count,
                 "Brood":    lambda m: m.hive.brood_count,
             }
         )
@@ -69,6 +77,7 @@ class BeeColonyModel(Model):
         for _ in range(new_nurses):
             nurse = NurseAgent(self)
             self.schedule.add(nurse)
+            self.nurse_count += 1
 
         for patch in self.flower_patches:
             patch.step()
@@ -79,29 +88,30 @@ class BeeColonyModel(Model):
     # ── Query helpers ────────────────────────────────────────────────────────
 
     def get_patch_at(self, pos: tuple) -> FlowerPatch | None:
-        """Return the FlowerPatch located at `pos`, or None."""
-        for patch in self.flower_patches:
-            if patch.pos == pos:
-                return patch
-        return None
+        """Return the FlowerPatch at `pos`, or None. O(1) via position index."""
+        return self._patch_index.get(pos)
 
     # ── Initialisation ───────────────────────────────────────────────────────
 
     def _place_flower_patches(self, n: int) -> None:
         hx, hy = HIVE_POS
+        # Clamp sampling range to valid interior cells (always at least one cell wide).
+        x_range = (1, max(2, self.width - 1))
+        y_range = (1, max(2, self.height - 1))
         placed, attempts = 0, 0
         while placed < n and attempts < n * 30:
             attempts += 1
-            x = self.random.randrange(1, self.width - 1)
-            y = self.random.randrange(1, self.height - 1)
+            x = self.random.randrange(*x_range)
+            y = self.random.randrange(*y_range)
             if abs(x - hx) + abs(y - hy) < MIN_PATCH_DISTANCE:
                 continue
-            if any(p.pos == (x, y) for p in self.flower_patches):
+            pos = (x, y)
+            if pos in self._patch_index:
                 continue
             quality = self.random.uniform(*PATCH_QUALITY_RANGE)
-            self.flower_patches.append(
-                FlowerPatch((x, y), PATCH_MAX_NECTAR, quality, PATCH_REGEN_RATE)
-            )
+            patch = FlowerPatch(pos, PATCH_MAX_NECTAR, quality, PATCH_REGEN_RATE)
+            self.flower_patches.append(patch)
+            self._patch_index[pos] = patch
             placed += 1
 
     def _spawn_initial_agents(self, n_nurses: int, n_foragers: int) -> None:
@@ -110,8 +120,10 @@ class BeeColonyModel(Model):
 
         for _ in range(n_nurses):
             self.schedule.add(NurseAgent(self))
+        self.nurse_count = n_nurses
 
         for _ in range(n_foragers):
             forager = ForagerAgent(self)
             self.grid.place_agent(forager, HIVE_POS)
             self.schedule.add(forager)
+        self.forager_count = n_foragers

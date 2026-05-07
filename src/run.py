@@ -10,8 +10,8 @@ from .config import DEFAULT_STEPS
 def main() -> None:
     parser = argparse.ArgumentParser(description="Bee Colony Simulation")
     parser.add_argument(
-        "--steps", type=int, default=DEFAULT_STEPS,
-        help=f"Number of simulation steps (default: {DEFAULT_STEPS})",
+        "--steps", type=int, default=None,
+        help=f"Number of simulation steps (default: unlimited for GUI, {DEFAULT_STEPS} for --headless)",
     )
     parser.add_argument(
         "--headless", action="store_true",
@@ -22,12 +22,13 @@ def main() -> None:
     model = BeeColonyModel()
 
     if args.headless:
-        for _ in range(args.steps):
+        steps = args.steps if args.steps is not None else DEFAULT_STEPS
+        for _ in range(steps):
             model.step()
         _print_stats(model)
     else:
         from .visualization import run_visualization
-        run_visualization(model, args.steps)
+        run_visualization(model, args.steps)  # None → run until window closed
 
 
 def _print_stats(model: BeeColonyModel) -> None:

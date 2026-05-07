@@ -1,6 +1,8 @@
 from enum import Enum, auto
 
 from ..config import FORAGER_REST_DURATION, FORAGER_LOAD_CAPACITY, COLLECTING_STEPS
+
+_NECTAR_PER_COLLECT_STEP = FORAGER_LOAD_CAPACITY / COLLECTING_STEPS
 from .base import BeeAgent
 
 
@@ -38,12 +40,14 @@ class ForagerAgent(BeeAgent):
     # ── Main dispatch ────────────────────────────────────────────────────────
 
     def step(self) -> None:
-        {
-            ForagerState.RESTING:    self._step_resting,
-            ForagerState.SCOUTING:   self._step_scouting,
-            ForagerState.COLLECTING: self._step_collecting,
-            ForagerState.RETURNING:  self._step_returning,
-        }[self.state]()
+        if self.state == ForagerState.RESTING:
+            self._step_resting()
+        elif self.state == ForagerState.SCOUTING:
+            self._step_scouting()
+        elif self.state == ForagerState.COLLECTING:
+            self._step_collecting()
+        elif self.state == ForagerState.RETURNING:
+            self._step_returning()
 
     # ── State handlers ───────────────────────────────────────────────────────
 
@@ -64,8 +68,7 @@ class ForagerAgent(BeeAgent):
     def _step_collecting(self) -> None:
         self._collect_timer += 1
         if self.target_patch and not self.target_patch.is_depleted:
-            per_step = FORAGER_LOAD_CAPACITY / COLLECTING_STEPS
-            collected = self.target_patch.collect(per_step)
+            collected = self.target_patch.collect(_NECTAR_PER_COLLECT_STEP)
             self.nectar_load = min(FORAGER_LOAD_CAPACITY, self.nectar_load + collected)
 
         patch_done = self.target_patch is None or self.target_patch.is_depleted

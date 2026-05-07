@@ -48,4 +48,6 @@ class NurseAgent(BeeAgent):
         self.model.grid.place_agent(forager, self.model.hive.pos)
         self.model.schedule.add(forager)
         self.model.schedule.remove(self)
+        self.model.nurse_count -= 1
+        self.model.forager_count += 1
         # Note: nurse was never placed on the grid, so no grid.remove_agent needed.
