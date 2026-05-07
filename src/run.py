@@ -1,36 +1,55 @@
-try:
-    from mesa.visualization.ModularVisualization import ModularServer
-    from mesa.visualization.modules import CanvasGrid, ChartModule
-    from mesa.visualization.UserParam import UserSettableParameter
-except Exception as e:
-    raise ImportError("ModularServer UI requires an older Mesa version (ModularVisualization). "
-                      "Install mesa==0.8.9 and retry. Original error: " + str(e))
+"""
+Entry point — run as:  python -m src.run  [--steps N] [--headless]
+"""
+import argparse
 
-from .mesa_model import BeeModel
+from .model import BeeColonyModel
+from .config import DEFAULT_STEPS
 
 
-def agent_portrayal(agent):
-    if agent is None:
-        return
-    portrayal = {"Shape": "rect", "w": 1, "h": 1, "Filled": "true", "Layer": 1, "Color": "orange"}
-    return portrayal
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Bee Colony Simulation")
+    parser.add_argument(
+        "--steps", type=int, default=DEFAULT_STEPS,
+        help=f"Number of simulation steps (default: {DEFAULT_STEPS})",
+    )
+    parser.add_argument(
+        "--headless", action="store_true",
+        help="Run without GUI and print final stats to stdout",
+    )
+    args = parser.parse_args()
+
+    model = BeeColonyModel()
+
+    if args.headless:
+        for _ in range(args.steps):
+            model.step()
+        _print_stats(model)
+    else:
+        from .visualization import run_visualization
+        run_visualization(model, args.steps)
 
 
-def make_server():
-    model_params = {
-        "width": UserSettableParameter("number", "Width", 40, 10, 200, 1),
-        "height": UserSettableParameter("number", "Height", 40, 10, 200, 1),
-        "initial_agents": UserSettableParameter("slider", "Initial agents", 80, 1, 200, 1),
-        "swarm_strength": UserSettableParameter("slider", "Swarm strength", 0.6, 0.0, 1.0, 0.05),
-    }
+def _print_stats(model: BeeColonyModel) -> None:
+    from .agents.nurse import NurseAgent
+    from .agents.forager import ForagerAgent
 
-    grid = CanvasGrid(agent_portrayal, 40, 40, 400, 400)
-    chart = ChartModule([{"Label": "AgentCount", "Color": "#AA0000"}], data_collector_name="datacollector")
+    nurses   = sum(1 for a in model.schedule.agents if isinstance(a, NurseAgent))
+    foragers = sum(1 for a in model.schedule.agents if isinstance(a, ForagerAgent))
 
-    server = ModularServer(BeeModel, [grid, chart], "Bee Swarm", model_params)
-    server.port = 8521
-    return server
+    print("\n── Colony state ──────────────────────────────────────")
+    print(f"  Steps run :  {model.schedule.steps}")
+    print(f"  Nectar    :  {model.hive.nectar:.1f}")
+    print(f"  Brood     :  {model.hive.brood_count}")
+    print(f"  Nurses    :  {nurses}")
+    print(f"  Foragers  :  {foragers}")
+    print("──────────────────────────────────────────────────────\n")
+
+    data = model.datacollector.get_model_vars_dataframe()
+    if not data.empty:
+        print(data.tail(10).to_string())
+        print()
 
 
 if __name__ == "__main__":
-    make_server().launch()
+    main()
