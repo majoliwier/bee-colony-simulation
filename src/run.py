@@ -17,11 +17,22 @@ def main() -> None:
         "--headless", action="store_true",
         help="Run without GUI and print final stats to stdout",
     )
+    parser.add_argument(
+        "--record", metavar="FILE",
+        help="Record simulation to an MP4 file (e.g. --record sim.mp4). Requires ffmpeg.",
+    )
+    parser.add_argument(
+        "--fps", type=int, default=30,
+        help="Frames per second for --record output (default: 30)",
+    )
     args = parser.parse_args()
 
     model = BeeColonyModel()
 
-    if args.headless:
+    if args.record:
+        from .visualization import record_visualization
+        record_visualization(model, args.steps, args.record, fps=args.fps)
+    elif args.headless:
         steps = args.steps if args.steps is not None else DEFAULT_STEPS
         for _ in range(steps):
             model.step()

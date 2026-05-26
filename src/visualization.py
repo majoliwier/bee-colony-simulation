@@ -1,11 +1,12 @@
 import itertools
 import math
+import pathlib
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from .agents.forager import ForagerAgent, ForagerState
-from .config import VIZ_UPDATE_INTERVAL, MAX_NECTAR_STORES
+from .config import VIZ_UPDATE_INTERVAL, MAX_NECTAR_STORES, DEFAULT_STEPS
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 _HIVE_COLOR  = (1.0, 0.85, 0.0)
@@ -62,6 +63,53 @@ def run_visualization(model, steps: int) -> None:
 
     plt.ioff()
     plt.show()
+
+
+def record_visualization(model, steps: int, output_path: str, fps: int = 30) -> None:
+    """
+    Run the model headlessly and write every rendered frame to an MP4.
+    Requires: pip install imageio imageio-ffmpeg
+    """
+    try:
+        import imageio
+    except ImportError:
+        raise SystemExit("imageio not found — run: pip install imageio imageio-ffmpeg")
+
+    import numpy as np
+
+    steps = steps if steps is not None else DEFAULT_STEPS
+
+    fig, (ax_grid, ax_stats) = plt.subplots(
+        1, 2, figsize=(13, 6),
+        gridspec_kw={"width_ratios": [2, 1]},
+        constrained_layout=True,
+    )
+    fig.patch.set_facecolor("#1a1a2e")
+    fig.canvas.draw()  # initialise renderer before grabbing pixels
+
+    print(f"Recording {steps} steps → {output_path}  (fps={fps})")
+
+    writer = imageio.get_writer(output_path, fps=fps, codec="libx264",
+                                quality=8, macro_block_size=1)
+    try:
+        for step in range(steps):
+            model.step()
+            _draw_grid(ax_grid, model)
+            _draw_stats(ax_stats, model)
+            fig.suptitle(
+                f"Bee Colony Simulation  —  step {model.schedule.steps}",
+                color="white", fontsize=13,
+            )
+            fig.canvas.draw()
+            frame = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+            writer.append_data(frame)
+            if step % 50 == 0:
+                print(f"  step {step}/{steps}", end="\r", flush=True)
+    finally:
+        writer.close()
+        plt.close(fig)
+
+    print(f"\nSaved: {output_path}")
 
 
 def _title(model) -> str:
