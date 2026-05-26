@@ -59,6 +59,14 @@ class BeeColonyModel(Model):
         self.forager_count: int = 0
         self.scout_count: int = 0
 
+        # first discovery per patch (used internally)
+        self.patch_discoveries: list[dict] = []
+        self._discovered_patches: set[tuple] = set()
+
+        # first waggle dance per patch: [{found_step, finder, patch_pos, quality, recruits: [{forager_id, arrived_step}]}]
+        self.dance_log: list[dict] = []
+        self._danced_patches: set[tuple] = set()
+
         self._place_flower_patches(num_patches)
         self._spawn_initial_agents(initial_nurses, initial_foragers, initial_scouts)
 
@@ -89,27 +97,52 @@ class BeeColonyModel(Model):
 
     # ── Waggle dance ─────────────────────────────────────────────────────────
 
-    def perform_waggle_dance(self, patch) -> None:
+    def perform_waggle_dance(self, patch, caller: str = "forager", found_step: int | None = None) -> None:
         """
         Recruit resting foragers at the hive to fly directly to `patch`.
-        Called by returning foragers and scouts on hive arrival.
+        Logs the first dance per patch (forager or scout) in dance_log.
+        found_step: step the agent landed on the patch (scouts pass this explicitly).
         """
         prof = self._patch_profitability(patch)
-        n = min(
-            WAGGLE_RECRUIT_MAX,
-            round(min(1.0, prof / WAGGLE_PROFITABILITY_SCALE) * WAGGLE_RECRUIT_MAX),
-        )
-        if n <= 0:
-            return
+        n = round(min(1.0, prof / WAGGLE_PROFITABILITY_SCALE) * WAGGLE_RECRUIT_MAX)
+
         resting = [
             a for a in self.grid.get_cell_list_contents([self.hive.pos])
             if isinstance(a, ForagerAgent) and a.state == ForagerState.RESTING
         ]
-        chosen = self.random.sample(resting, min(n, len(resting)))
+        chosen = self.random.sample(resting, min(n, len(resting))) if n > 0 else []
+
+        if patch.pos not in self._danced_patches:
+            self._danced_patches.add(patch.pos)
+            log_entry: dict = {
+                "found_step": found_step if found_step is not None else self.schedule.steps,
+                "finder":     caller,
+                "patch_pos":  patch.pos,
+                "quality":    round(patch.quality, 2),
+                "recruits":   [],
+            }
+            self.dance_log.append(log_entry)
+            for f in chosen:
+                recruit_record = {"forager_id": f.unique_id, "arrived_step": None}
+                log_entry["recruits"].append(recruit_record)
+                f._scout_log_entry = recruit_record
+
         for f in chosen:
             f.target_patch = patch
             f.state = ForagerState.FLYING_TO_PATCH
             f._rest_timer = 0
+
+    def record_patch_discovery(self, patch, finder: str) -> None:
+        """Log the first time any agent lands on a patch. Subsequent visits are ignored."""
+        if patch.pos in self._discovered_patches:
+            return
+        self._discovered_patches.add(patch.pos)
+        self.patch_discoveries.append({
+            "step":    self.schedule.steps,
+            "finder":  finder,
+            "pos":     patch.pos,
+            "quality": round(patch.quality, 2),
+        })
 
     def _patch_profitability(self, patch) -> float:
         dx = patch.pos[0] - self.hive.pos[0]

@@ -4,9 +4,9 @@ from ..config import (
     FORAGER_REST_DURATION, FORAGER_LOAD_CAPACITY, COLLECTING_STEPS,
     FORAGER_MAX_ENERGY, FORAGER_ENERGY_COST_PER_STEP,
 )
+from .base import BeeAgent
 
 _NECTAR_PER_COLLECT_STEP = FORAGER_LOAD_CAPACITY / COLLECTING_STEPS
-from .base import BeeAgent
 
 
 class ForagerState(Enum):
@@ -37,6 +37,8 @@ class ForagerAgent(BeeAgent):
         self._rest_timer: int = 0
         self._collect_timer: int = 0
         self.energy: float = float(FORAGER_MAX_ENERGY)
+        self._scout_log_entry: dict | None = None  # set when recruited by a waggle dance
+        self._found_at_step: int = 0
 
     # ── Main dispatch ────────────────────────────────────────────────────────
 
@@ -70,17 +72,22 @@ class ForagerAgent(BeeAgent):
         self._random_move()
         patch = self.model.get_patch_at(self.pos)
         if patch and not patch.is_depleted:
+            self.model.record_patch_discovery(patch, "forager")
             self.target_patch = patch
+            self._found_at_step = self.model.schedule.steps
             self._collect_timer = 0
             self.state = ForagerState.COLLECTING
 
     def _step_flying_to_patch(self) -> None:
         if self.target_patch is None or self.target_patch.is_depleted:
-            # Patch gone — fall back to scouting
+            self._scout_log_entry = None  # patch gone before arrival
             self.target_patch = None
             self.state = ForagerState.SCOUTING
             return
         if self.pos == self.target_patch.pos:
+            if self._scout_log_entry is not None:
+                self._scout_log_entry["arrived_step"] = self.model.schedule.steps
+                self._scout_log_entry = None
             self._collect_timer = 0
             self.state = ForagerState.COLLECTING
         else:
@@ -101,7 +108,7 @@ class ForagerAgent(BeeAgent):
             self.model.hive.deposit(self.nectar_load)
             self.nectar_load = 0.0
             if self.target_patch is not None:
-                self.model.perform_waggle_dance(self.target_patch)
+                self.model.perform_waggle_dance(self.target_patch, found_step=self._found_at_step)
             self.target_patch = None
             self.state = ForagerState.RESTING
         else:
@@ -114,21 +121,3 @@ class ForagerAgent(BeeAgent):
         self.model.schedule.remove(self)
         self.model.forager_count -= 1
 
-    # ── Movement ─────────────────────────────────────────────────────────────
-
-    def _random_move(self) -> None:
-        neighbors = self.model.grid.get_neighborhood(
-            self.pos, moore=True, include_center=False
-        )
-        self.model.grid.move_agent(self, self.random.choice(neighbors))
-
-    def _move_toward(self, target: tuple) -> None:
-        cx, cy = self.pos
-        tx, ty = target
-        dx = (1 if tx > cx else -1) if tx != cx else 0
-        dy = (1 if ty > cy else -1) if ty != cy else 0
-        new_pos = (
-            max(0, min(self.model.width - 1, cx + dx)),
-            max(0, min(self.model.height - 1, cy + dy)),
-        )
-        self.model.grid.move_agent(self, new_pos)

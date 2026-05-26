@@ -40,11 +40,10 @@ class NurseAgent(BeeAgent):
             self._become_forager()
 
     def _should_become_forager(self) -> bool:
-        if self.age >= NURSE_TO_FORAGER_AGE:
-            return True
-        if self.model.hive.nectar_deficit > self.forager_threshold:
-            return True
-        return False
+        return (
+            self.age >= NURSE_TO_FORAGER_AGE
+            or self.model.hive.nectar_deficit > self.forager_threshold
+        )
 
     def _die(self) -> None:
         self.model.schedule.remove(self)

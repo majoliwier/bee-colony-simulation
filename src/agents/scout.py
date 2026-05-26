@@ -1,10 +1,12 @@
+from enum import Enum, auto
+
 from ..config import SCOUT_MAX_ENERGY, FORAGER_ENERGY_COST_PER_STEP
 from .base import BeeAgent
 
 
-class ScoutState:
-    SCOUTING  = "SCOUTING"
-    RETURNING = "RETURNING"
+class ScoutState(Enum):
+    SCOUTING  = auto()
+    RETURNING = auto()
 
 
 class ScoutAgent(BeeAgent):
@@ -20,9 +22,10 @@ class ScoutAgent(BeeAgent):
 
     def __init__(self, model):
         super().__init__(model)
-        self.state: str = ScoutState.SCOUTING
+        self.state: ScoutState = ScoutState.SCOUTING
         self.target_patch = None
         self.energy: float = float(SCOUT_MAX_ENERGY)
+        self._found_at_step: int = 0
 
     def step(self) -> None:
         self.energy -= FORAGER_ENERGY_COST_PER_STEP
@@ -39,7 +42,9 @@ class ScoutAgent(BeeAgent):
         self._random_move()
         patch = self.model.get_patch_at(self.pos)
         if patch and not patch.is_depleted:
+            self.model.record_patch_discovery(patch, "scout")
             self.target_patch = patch
+            self._found_at_step = self.model.schedule.steps
             self.state = ScoutState.RETURNING
 
     def _step_returning(self) -> None:
@@ -48,7 +53,7 @@ class ScoutAgent(BeeAgent):
             self.state = ScoutState.SCOUTING
             return
         if self.pos == self.model.hive.pos:
-            self.model.perform_waggle_dance(self.target_patch)
+            self.model.perform_waggle_dance(self.target_patch, caller="scout", found_step=self._found_at_step)
             self.target_patch = None
             self.state = ScoutState.SCOUTING
         else:
@@ -58,20 +63,10 @@ class ScoutAgent(BeeAgent):
         self.model.grid.remove_agent(self)
         self.model.schedule.remove(self)
         self.model.scout_count -= 1
-
-    def _random_move(self) -> None:
-        neighbors = self.model.grid.get_neighborhood(
-            self.pos, moore=True, include_center=False
-        )
-        self.model.grid.move_agent(self, self.random.choice(neighbors))
-
-    def _move_toward(self, target: tuple) -> None:
-        cx, cy = self.pos
-        tx, ty = target
-        dx = (1 if tx > cx else -1) if tx != cx else 0
-        dy = (1 if ty > cy else -1) if ty != cy else 0
-        new_pos = (
-            max(0, min(self.model.width - 1, cx + dx)),
-            max(0, min(self.model.height - 1, cy + dy)),
-        )
-        self.model.grid.move_agent(self, new_pos)
+        # Immediately replace with a fresh scout so the colony always has INITIAL_SCOUTS.
+        from ..config import INITIAL_SCOUTS, HIVE_POS
+        if self.model.scout_count < INITIAL_SCOUTS:
+            replacement = ScoutAgent(self.model)
+            self.model.grid.place_agent(replacement, HIVE_POS)
+            self.model.schedule.add(replacement)
+            self.model.scout_count += 1

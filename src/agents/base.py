@@ -18,3 +18,22 @@ class BeeAgent(mesa.Agent):
             super().__init__(model.next_id(), model)
         else:
             super().__init__(model)
+
+    # ── Shared movement helpers (used by ForagerAgent and ScoutAgent) ─────────
+
+    def _random_move(self) -> None:
+        neighbors = self.model.grid.get_neighborhood(
+            self.pos, moore=True, include_center=False
+        )
+        self.model.grid.move_agent(self, self.random.choice(neighbors))
+
+    def _move_toward(self, target: tuple) -> None:
+        cx, cy = self.pos
+        tx, ty = target
+        dx = (1 if tx > cx else -1) if tx != cx else 0
+        dy = (1 if ty > cy else -1) if ty != cy else 0
+        new_pos = (
+            max(0, min(self.model.width - 1, cx + dx)),
+            max(0, min(self.model.height - 1, cy + dy)),
+        )
+        self.model.grid.move_agent(self, new_pos)

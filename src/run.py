@@ -32,6 +32,7 @@ def main() -> None:
     if args.record:
         from .visualization import record_visualization
         record_visualization(model, args.steps, args.record, fps=args.fps)
+        _print_stats(model)
     elif args.headless:
         steps = args.steps if args.steps is not None else DEFAULT_STEPS
         for _ in range(steps):
@@ -43,19 +44,38 @@ def main() -> None:
 
 
 def _print_stats(model: BeeColonyModel) -> None:
-    from .agents.nurse import NurseAgent
-    from .agents.forager import ForagerAgent
-
-    nurses   = sum(1 for a in model.schedule.agents if isinstance(a, NurseAgent))
-    foragers = sum(1 for a in model.schedule.agents if isinstance(a, ForagerAgent))
-
     print("\n── Colony state ──────────────────────────────────────")
     print(f"  Steps run :  {model.schedule.steps}")
     print(f"  Nectar    :  {model.hive.nectar:.1f}")
     print(f"  Brood     :  {model.hive.brood_count}")
-    print(f"  Nurses    :  {nurses}")
-    print(f"  Foragers  :  {foragers}")
+    print(f"  Nurses    :  {model.nurse_count}")
+    print(f"  Foragers  :  {model.forager_count}")
+    print(f"  Scouts    :  {model.scout_count}")
     print("──────────────────────────────────────────────────────\n")
+
+    discoveries = sorted(model.patch_discoveries, key=lambda d: d["step"])
+    total = len(model.flower_patches)
+    print(f"\n── Patch discoveries ({len(discoveries)}/{total} found) ──")
+
+    # build lookup: patch_pos -> first dance log entry (for attaching recruit chains)
+    dance_chains = {e["patch_pos"]: e for e in model.dance_log}
+
+    if discoveries:
+        for d in discoveries:
+            print(f"\n  step {d['step']:>4}  [{d['finder']:>7}]  pos={d['pos']}  quality={d['quality']:.2f}")
+            chain = dance_chains.get(d["pos"])
+            if chain and chain["recruits"]:
+                for r in chain["recruits"]:
+                    if r["arrived_step"] is not None:
+                        status = f"arrived step {r['arrived_step']:>4}"
+                    else:
+                        status = "never arrived (died or patch depleted)"
+                    print(f"    +- forager #{r['forager_id']:<3}  {status}")
+            else:
+                print("    (no resting foragers when dance performed)")
+    else:
+        print("  none")
+    print()
 
     data = model.datacollector.get_model_vars_dataframe()
     if not data.empty:
