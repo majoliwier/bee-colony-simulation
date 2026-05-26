@@ -33,6 +33,21 @@ PATCH_REGEN_RATE = 0.3          # nectar regenerated per step
 PATCH_QUALITY_RANGE = (0.5, 1.5)  # quality multiplier range (applied to collected nectar)
 MIN_PATCH_DISTANCE = 5           # allow patches closer to hive so early demos show activity
 
+# ── Forager energy / death ──────────────────────────────────────────────────
+FORAGER_MAX_ENERGY = 200         # steps of flight before exhaustion
+FORAGER_ENERGY_COST_PER_STEP = 1 # energy lost per step while not resting
+
+# ── Nurse death ──────────────────────────────────────────────────────────────
+MAX_NURSE_AGE = 100              # fallback death age (should normally switch first)
+
+# ── Waggle dance ─────────────────────────────────────────────────────────────
+WAGGLE_RECRUIT_MAX = 5           # max foragers recruited per dance
+WAGGLE_PROFITABILITY_SCALE = 5.0 # normalization: ~max expected profitability value
+
+# ── Scout ────────────────────────────────────────────────────────────────────
+INITIAL_SCOUTS = 3
+SCOUT_MAX_ENERGY = 300           # scouts fly more (always random walk)
+
 # ── Simulation / Visualisation ───────────────────────────────────────────────
 DEFAULT_STEPS = 300
 VIZ_UPDATE_INTERVAL = 3  # redraw display every N steps

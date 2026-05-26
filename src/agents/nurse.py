@@ -2,6 +2,7 @@ from ..config import (
     NURSE_FEEDING_RATE,
     NURSE_TO_FORAGER_AGE,
     NURSE_FORAGER_THRESHOLD_RANGE,
+    MAX_NURSE_AGE,
 )
 from .base import BeeAgent
 
@@ -31,6 +32,10 @@ class NurseAgent(BeeAgent):
         self.age += 1
         self.model.hive.consume(NURSE_FEEDING_RATE)
 
+        if self.age >= MAX_NURSE_AGE:
+            self._die()
+            return
+
         if self._should_become_forager():
             self._become_forager()
 
@@ -40,6 +45,10 @@ class NurseAgent(BeeAgent):
         if self.model.hive.nectar_deficit > self.forager_threshold:
             return True
         return False
+
+    def _die(self) -> None:
+        self.model.schedule.remove(self)
+        self.model.nurse_count -= 1
 
     def _become_forager(self) -> None:
         from .forager import ForagerAgent  # local import avoids circular dependency
