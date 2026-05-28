@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from .agents.forager import ForagerAgent, ForagerState
+from .agents.scout import ScoutAgent
 from .config import VIZ_UPDATE_INTERVAL, MAX_NECTAR_STORES, DEFAULT_STEPS
 
 # ── Colour palette ────────────────────────────────────────────────────────────
@@ -13,14 +14,16 @@ _HIVE_COLOR  = (1.0, 0.85, 0.0)
 _PATCH_COLOR = (0.18, 0.65, 0.18)
 _BG_COLOR    = (0.93, 0.93, 0.93)
 
-_NURSE_COLOR = "dodgerblue"
-_QUEEN_COLOR = "gold"
+_NURSE_COLOR  = "dodgerblue"
+_QUEEN_COLOR  = "gold"
+_SCOUT_COLOR  = "mediumpurple"
 
 _FORAGER_COLORS = {
-    ForagerState.RESTING:    "#b8860b",   # dark gold  (at hive, idle)
-    ForagerState.SCOUTING:   "darkorange",
-    ForagerState.COLLECTING: "limegreen",
-    ForagerState.RETURNING:  "crimson",
+    ForagerState.RESTING:         "#b8860b",   # dark gold  (at hive, idle)
+    ForagerState.SCOUTING:        "darkorange",
+    ForagerState.FLYING_TO_PATCH: "steelblue",
+    ForagerState.COLLECTING:      "limegreen",
+    ForagerState.RETURNING:       "crimson",
 }
 
 
@@ -160,6 +163,9 @@ def _draw_grid(ax, model) -> None:
             px, py = agent.pos
             color = _FORAGER_COLORS.get(agent.state, "blue")
             ax.plot(px + 0.5, py + 0.5, "o", color=color, markersize=5, zorder=4)
+        elif isinstance(agent, ScoutAgent) and agent.pos is not None:
+            px, py = agent.pos
+            ax.plot(px + 0.5, py + 0.5, "^", color=_SCOUT_COLOR, markersize=5, zorder=4)
 
     ax.legend(handles=_grid_legend(), loc="upper left", fontsize=7,
               facecolor="#222", labelcolor="white", framealpha=0.8)
@@ -187,7 +193,10 @@ def _grid_legend() -> list:
         plt.Line2D([0], [0], marker="*", color="w", markerfacecolor=_QUEEN_COLOR,
                    markersize=10, label="Queen"),
         mpatches.Patch(facecolor=_NURSE_COLOR,               label="Nurse"),
+        plt.Line2D([0], [0], marker="^", color="w", markerfacecolor=_SCOUT_COLOR,
+                   markersize=7, label="Scout"),
         mpatches.Patch(facecolor="darkorange",               label="Forager: scouting"),
+        mpatches.Patch(facecolor="steelblue",                label="Forager: to patch"),
         mpatches.Patch(facecolor="limegreen",                label="Forager: collecting"),
         mpatches.Patch(facecolor="crimson",                  label="Forager: returning"),
         mpatches.Patch(facecolor="#b8860b",                  label="Forager: resting"),
@@ -204,6 +213,7 @@ def _draw_stats(ax, model) -> None:
 
     nurses   = model.nurse_count
     foragers = model.forager_count
+    scouts   = model.scout_count
 
     text = (
         f"Step      {model.schedule.steps:>6}\n\n"
@@ -211,6 +221,7 @@ def _draw_stats(ax, model) -> None:
         f"Brood     {model.hive.brood_count:>6}\n\n"
         f"Nurses    {nurses:>6}\n"
         f"Foragers  {foragers:>6}\n"
+        f"Scouts    {scouts:>6}\n"
     )
     ax.text(
         0.08, 0.92, text,
@@ -227,6 +238,7 @@ def _draw_stats(ax, model) -> None:
         ax_sub.plot(data["Nectar"].values,   color="gold",        lw=1.5, label="Nectar")
         ax_sub.plot(data["Nurses"].values,   color=_NURSE_COLOR,  lw=1.2, label="Nurses")
         ax_sub.plot(data["Foragers"].values, color="darkorange",  lw=1.2, label="Foragers")
+        ax_sub.plot(data["Scouts"].values,   color=_SCOUT_COLOR,  lw=1.2, label="Scouts")
         ax_sub.set_title("Trends", color="white", fontsize=8)
         ax_sub.tick_params(colors="white", labelsize=6)
         for spine in ax_sub.spines.values():

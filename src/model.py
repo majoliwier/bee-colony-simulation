@@ -8,13 +8,15 @@ from mesa.datacollection import DataCollector
 from .config import (
     GRID_WIDTH, GRID_HEIGHT,
     HIVE_POS, INITIAL_NECTAR,
-    INITIAL_NURSES, INITIAL_FORAGERS,
+    INITIAL_NURSES, INITIAL_FORAGERS, INITIAL_SCOUTS,
     NUM_FLOWER_PATCHES,
     PATCH_MAX_NECTAR, PATCH_REGEN_RATE, PATCH_QUALITY_RANGE, MIN_PATCH_DISTANCE,
+    WAGGLE_RECRUIT_MAX, WAGGLE_PROFITABILITY_SCALE,
 )
 from .agents.queen import QueenAgent
 from .agents.nurse import NurseAgent
-from .agents.forager import ForagerAgent
+from .agents.forager import ForagerAgent, ForagerState
+from .agents.scout import ScoutAgent
 from .environment.hive import Hive
 from .environment.flower_patch import FlowerPatch
 
@@ -37,6 +39,7 @@ class BeeColonyModel(Model):
         height: int = GRID_HEIGHT,
         initial_nurses: int = INITIAL_NURSES,
         initial_foragers: int = INITIAL_FORAGERS,
+        initial_scouts: int = INITIAL_SCOUTS,
         num_patches: int = NUM_FLOWER_PATCHES,
     ):
         if width < 3 or height < 3:
@@ -51,20 +54,28 @@ class BeeColonyModel(Model):
 
         self.hive = Hive(HIVE_POS, INITIAL_NECTAR)
         self.flower_patches: list[FlowerPatch] = []
-        # O(1) patch lookup keyed by grid position — kept in sync with flower_patches list.
         self._patch_index: dict[tuple, FlowerPatch] = {}
-        # Agent-type counters — kept in sync manually so callers avoid O(n) scans.
         self.nurse_count: int = 0
         self.forager_count: int = 0
+        self.scout_count: int = 0
+
+        # first discovery per patch (used internally)
+        self.patch_discoveries: list[dict] = []
+        self._discovered_patches: set[tuple] = set()
+
+        # first waggle dance per patch: [{found_step, finder, patch_pos, quality, recruits: [{forager_id, arrived_step}]}]
+        self.dance_log: list[dict] = []
+        self._danced_patches: set[tuple] = set()
 
         self._place_flower_patches(num_patches)
-        self._spawn_initial_agents(initial_nurses, initial_foragers)
+        self._spawn_initial_agents(initial_nurses, initial_foragers, initial_scouts)
 
         self.datacollector = DataCollector(
             model_reporters={
                 "Nectar":   lambda m: round(m.hive.nectar, 1),
                 "Nurses":   lambda m: m.nurse_count,
                 "Foragers": lambda m: m.forager_count,
+                "Scouts":   lambda m: m.scout_count,
                 "Brood":    lambda m: m.hive.brood_count,
             }
         )
@@ -72,7 +83,6 @@ class BeeColonyModel(Model):
     # ── Per-step logic ───────────────────────────────────────────────────────
 
     def step(self) -> None:
-        # Hatch eggs whose incubation period ended — each produces one nurse.
         new_nurses = self.hive.hatch(self.schedule.steps)
         for _ in range(new_nurses):
             nurse = NurseAgent(self)
@@ -85,17 +95,70 @@ class BeeColonyModel(Model):
         self.datacollector.collect(self)
         self.schedule.step()
 
+    # ── Waggle dance ─────────────────────────────────────────────────────────
+
+    def perform_waggle_dance(self, patch, caller: str = "forager", found_step: int | None = None) -> None:
+        """
+        Recruit resting foragers at the hive to fly directly to `patch`.
+        Logs the first dance per patch (forager or scout) in dance_log.
+        found_step: step the agent landed on the patch (scouts pass this explicitly).
+        """
+        prof = self._patch_profitability(patch)
+        n = round(min(1.0, prof / WAGGLE_PROFITABILITY_SCALE) * WAGGLE_RECRUIT_MAX)
+
+        resting = [
+            a for a in self.grid.get_cell_list_contents([self.hive.pos])
+            if isinstance(a, ForagerAgent) and a.state == ForagerState.RESTING
+        ]
+        chosen = self.random.sample(resting, min(n, len(resting))) if n > 0 else []
+
+        if patch.pos not in self._danced_patches:
+            self._danced_patches.add(patch.pos)
+            log_entry: dict = {
+                "found_step": found_step if found_step is not None else self.schedule.steps,
+                "finder":     caller,
+                "patch_pos":  patch.pos,
+                "quality":    round(patch.quality, 2),
+                "recruits":   [],
+            }
+            self.dance_log.append(log_entry)
+            for f in chosen:
+                recruit_record = {"forager_id": f.unique_id, "arrived_step": None}
+                log_entry["recruits"].append(recruit_record)
+                f._scout_log_entry = recruit_record
+
+        for f in chosen:
+            f.target_patch = patch
+            f.state = ForagerState.FLYING_TO_PATCH
+            f._rest_timer = 0
+
+    def record_patch_discovery(self, patch, finder: str) -> None:
+        """Log the first time any agent lands on a patch. Subsequent visits are ignored."""
+        if patch.pos in self._discovered_patches:
+            return
+        self._discovered_patches.add(patch.pos)
+        self.patch_discoveries.append({
+            "step":    self.schedule.steps,
+            "finder":  finder,
+            "pos":     patch.pos,
+            "quality": round(patch.quality, 2),
+        })
+
+    def _patch_profitability(self, patch) -> float:
+        dx = patch.pos[0] - self.hive.pos[0]
+        dy = patch.pos[1] - self.hive.pos[1]
+        dist_sq = max(1, dx * dx + dy * dy)
+        return patch.quality * patch.nectar / dist_sq
+
     # ── Query helpers ────────────────────────────────────────────────────────
 
     def get_patch_at(self, pos: tuple) -> FlowerPatch | None:
-        """Return the FlowerPatch at `pos`, or None. O(1) via position index."""
         return self._patch_index.get(pos)
 
     # ── Initialisation ───────────────────────────────────────────────────────
 
     def _place_flower_patches(self, n: int) -> None:
         hx, hy = HIVE_POS
-        # Clamp sampling range to valid interior cells (always at least one cell wide).
         x_range = (1, max(2, self.width - 1))
         y_range = (1, max(2, self.height - 1))
         placed, attempts = 0, 0
@@ -114,8 +177,7 @@ class BeeColonyModel(Model):
             self._patch_index[pos] = patch
             placed += 1
 
-    def _spawn_initial_agents(self, n_nurses: int, n_foragers: int) -> None:
-        # Queen — lives inside hive, not placed on grid
+    def _spawn_initial_agents(self, n_nurses: int, n_foragers: int, n_scouts: int) -> None:
         self.schedule.add(QueenAgent(self))
 
         for _ in range(n_nurses):
@@ -127,3 +189,9 @@ class BeeColonyModel(Model):
             self.grid.place_agent(forager, HIVE_POS)
             self.schedule.add(forager)
         self.forager_count = n_foragers
+
+        for _ in range(n_scouts):
+            scout = ScoutAgent(self)
+            self.grid.place_agent(scout, HIVE_POS)
+            self.schedule.add(scout)
+        self.scout_count = n_scouts
