@@ -148,20 +148,24 @@ class _GridRenderer:
         ax_x, ax_y, ax_u, ax_v, ax_c = [], [], [], [], []
         returning_scouts = []
         for agent in model.schedule.agents:
-            if (isinstance(agent, ForagerAgent) and agent.pos is not None
-                    and agent.state == ForagerState.FLYING_TO_PATCH
-                    and agent.target_patch is not None):
-                x, y = agent.pos
-                target = agent.target_patch.pos
-                dx, dy = target[0] - x, target[1] - y
-                dist = (dx * dx + dy * dy) ** 0.5
-                if dist == 0:
-                    continue
-                ax_x.append(x + 0.5)
-                ax_y.append(y + 0.5)
-                ax_u.append(dx / dist * 0.6)
-                ax_v.append(dy / dist * 0.6)
-                ax_c.append(_FORAGER_COLORS[ForagerState.FLYING_TO_PATCH])
+            if isinstance(agent, ForagerAgent) and agent.pos is not None:
+                if agent.state == ForagerState.FLYING_TO_PATCH and agent.target_patch is not None:
+                    target = agent.target_patch.pos
+                elif agent.state == ForagerState.RETURNING:
+                    target = model.hive.pos
+                else:
+                    target = None
+                if target is not None:
+                    x, y = agent.pos
+                    dx, dy = target[0] - x, target[1] - y
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    if dist == 0:
+                        continue
+                    ax_x.append(x + 0.5)
+                    ax_y.append(y + 0.5)
+                    ax_u.append(dx / dist * 0.6)
+                    ax_v.append(dy / dist * 0.6)
+                    ax_c.append(_FORAGER_COLORS[agent.state])
             elif (isinstance(agent, ScoutAgent) and agent.pos is not None
                     and agent.state == ScoutState.RETURNING):
                 returning_scouts.append(agent.pos)
