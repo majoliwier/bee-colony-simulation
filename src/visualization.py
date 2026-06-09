@@ -11,9 +11,11 @@ from .agents.scout import ScoutAgent, ScoutState
 from .config import VIZ_UPDATE_INTERVAL, MAX_NECTAR_STORES, DEFAULT_STEPS
 
 # ── Colour palette ────────────────────────────────────────────────────────────
-_HIVE_COLOR  = (1.0, 0.85, 0.0)
-_PATCH_COLOR = (0.18, 0.65, 0.18)
-_BG_COLOR    = (0.93, 0.93, 0.93)
+_HIVE_COLOR         = (1.0, 0.85, 0.0)
+_PATCH_COLOR        = (0.18, 0.65, 0.18)
+_PATCH_COLOR_EMPTY  = (0.60, 0.60, 0.60)   # temporarily depleted — recovers
+_PATCH_COLOR_DEAD   = (0.28, 0.28, 0.28)   # permanently exhausted
+_BG_COLOR           = (0.93, 0.93, 0.93)
 
 _NURSE_COLOR  = "dodgerblue"
 _QUEEN_COLOR  = "gold"
@@ -103,8 +105,16 @@ class _GridRenderer:
             self._ph_im.set_visible(False)
 
         for circle, patch in zip(self._flower_circles, self._flower_patches):
-            r = 0.15 + 0.45 * (patch.nectar / patch.max_nectar if patch.max_nectar else 0)
-            circle.set_radius(r)
+            if patch.exhausted:
+                circle.set_radius(0.08)
+                circle.set_color(_PATCH_COLOR_DEAD)
+            elif patch.is_depleted:
+                circle.set_radius(0.12)
+                circle.set_color(_PATCH_COLOR_EMPTY)
+            else:
+                r = 0.15 + 0.45 * (patch.nectar / patch.max_nectar if patch.max_nectar else 0)
+                circle.set_radius(r)
+                circle.set_color(_PATCH_COLOR)
 
         hx, hy = self._hx, self._hy
         nurses  = model.nurse_count
@@ -463,8 +473,10 @@ def _title(model) -> str:
 
 def _grid_legend() -> list:
     return [
-        mpatches.Patch(facecolor=_HIVE_COLOR,   edgecolor="k", label="Hive"),
-        mpatches.Patch(facecolor=_PATCH_COLOR,               label="Flower patch"),
+        mpatches.Patch(facecolor=_HIVE_COLOR,        edgecolor="k", label="Hive"),
+        mpatches.Patch(facecolor=_PATCH_COLOR,                    label="Flower patch"),
+        mpatches.Patch(facecolor=_PATCH_COLOR_EMPTY,              label="Patch (recovering)"),
+        mpatches.Patch(facecolor=_PATCH_COLOR_DEAD,               label="Patch (exhausted)"),
         plt.Line2D([0], [0], marker="*", color="w", markerfacecolor=_QUEEN_COLOR,
                    markersize=10, label="Queen"),
         mpatches.Patch(facecolor=_NURSE_COLOR,               label="Nurse"),

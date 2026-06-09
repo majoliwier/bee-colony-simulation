@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import numpy as np
 from mesa import Model
 from mesa.time import RandomActivation
@@ -11,8 +12,8 @@ from .config import (
     HIVE_POS, INITIAL_NECTAR,
     INITIAL_NURSES, INITIAL_FORAGERS, INITIAL_SCOUTS,
     NUM_FLOWER_PATCHES,
-    PATCH_MAX_NECTAR, PATCH_REGEN_RATE, PATCH_QUALITY_RANGE, MIN_PATCH_DISTANCE,
-    WAGGLE_RECRUIT_MAX, WAGGLE_PROFITABILITY_SCALE,
+    PATCH_MAX_NECTAR, PATCH_REGEN_RATE, PATCH_QUALITY_RANGE, MIN_PATCH_DISTANCE, PATCH_LIFETIME_NECTAR,
+    WAGGLE_RECRUIT_MAX, WAGGLE_PROFITABILITY_SCALE, WAGGLE_ANGLE_NOISE,
     PHEROMONE_DECAY, PHEROMONE_DIFFUSION,
 )
 from .agents.queen import QueenAgent
@@ -43,11 +44,14 @@ class BeeColonyModel(Model):
         initial_foragers: int = INITIAL_FORAGERS,
         initial_scouts: int = INITIAL_SCOUTS,
         num_patches: int = NUM_FLOWER_PATCHES,
+        seed: int | None = None,
     ):
         if width < 3 or height < 3:
             raise ValueError(f"Grid must be at least 3×3, got {width}×{height}.")
 
         super().__init__()
+        if seed is not None:
+            self.random.seed(seed)
         self.width = width
         self.height = height
 
@@ -132,8 +136,7 @@ class BeeColonyModel(Model):
         Logs the first dance per patch (forager or scout) in dance_log.
         found_step: step the agent landed on the patch (scouts pass this explicitly).
         """
-        prof = self._patch_profitability(patch)
-        n = round(min(1.0, prof / WAGGLE_PROFITABILITY_SCALE) * WAGGLE_RECRUIT_MAX)
+        n = round(self._profitability_ratio(patch) * WAGGLE_RECRUIT_MAX)
 
         resting = [
             a for a in self.grid.get_cell_list_contents([self.hive.pos])
@@ -158,6 +161,7 @@ class BeeColonyModel(Model):
 
         for f in chosen:
             f.target_patch = patch
+            f.dance_target_pos = self._compute_dance_target(patch)
             f.state = ForagerState.FLYING_TO_PATCH
             f._rest_timer = 0
 
@@ -179,10 +183,49 @@ class BeeColonyModel(Model):
         dist_sq = max(1, dx * dx + dy * dy)
         return patch.quality * patch.nectar / dist_sq
 
+    def _profitability_ratio(self, patch) -> float:
+        return min(1.0, self._patch_profitability(patch) / WAGGLE_PROFITABILITY_SCALE)
+
+    def _compute_dance_target(self, patch) -> tuple[int, int]:
+        hx, hy = self.hive.pos
+        px, py = patch.pos
+        dist = math.hypot(px - hx, py - hy)
+        if dist < 1:
+            return patch.pos
+        angle = math.atan2(py - hy, px - hx)
+        noisy_angle = angle + self.random.gauss(0, WAGGLE_ANGLE_NOISE)
+        tx = round(hx + dist * math.cos(noisy_angle))
+        ty = round(hy + dist * math.sin(noisy_angle))
+        tx = max(0, min(self.width - 1, tx))
+        ty = max(0, min(self.height - 1, ty))
+        return (tx, ty)
+
+    def promote_nurse_to_forager(self, nurse: NurseAgent) -> None:
+        forager = ForagerAgent(self)
+        self.grid.place_agent(forager, self.hive.pos)
+        self.schedule.add(forager)
+        self.schedule.remove(nurse)
+        self.nurse_count -= 1
+        self.forager_count += 1
+
     # ── Query helpers ────────────────────────────────────────────────────────
 
     def get_patch_at(self, pos: tuple) -> FlowerPatch | None:
         return self._patch_index.get(pos)
+
+    def get_patch_near(self, pos: tuple, radius: int) -> FlowerPatch | None:
+        """Return the closest non-depleted patch within Chebyshev `radius`, or None."""
+        best: FlowerPatch | None = None
+        best_dist = radius + 1
+        px, py = pos
+        for patch in self.flower_patches:
+            if patch.is_depleted:
+                continue
+            dist = max(abs(patch.pos[0] - px), abs(patch.pos[1] - py))
+            if dist <= radius and dist < best_dist:
+                best_dist = dist
+                best = patch
+        return best
 
     # ── Initialisation ───────────────────────────────────────────────────────
 
@@ -201,7 +244,7 @@ class BeeColonyModel(Model):
             if pos in self._patch_index:
                 continue
             quality = self.random.uniform(*PATCH_QUALITY_RANGE)
-            patch = FlowerPatch(pos, PATCH_MAX_NECTAR, quality, PATCH_REGEN_RATE)
+            patch = FlowerPatch(pos, PATCH_MAX_NECTAR, quality, PATCH_REGEN_RATE, PATCH_LIFETIME_NECTAR)
             self.flower_patches.append(patch)
             self._patch_index[pos] = patch
             placed += 1

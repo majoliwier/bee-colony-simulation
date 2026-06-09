@@ -2,6 +2,7 @@
 Entry point — run as:  python -m src.run  [--steps N] [--headless]
 """
 import argparse
+import statistics
 
 from .model import BeeColonyModel
 from .config import DEFAULT_STEPS
@@ -11,7 +12,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Bee Colony Simulation")
     parser.add_argument(
         "--steps", type=int, default=None,
-        help=f"Number of simulation steps (default: unlimited for GUI, {DEFAULT_STEPS} for --headless)",
+        help=f"Number of simulation steps (default: unlimited for GUI, {DEFAULT_STEPS} for --headless/batch)",
     )
     parser.add_argument(
         "--headless", action="store_true",
@@ -25,9 +26,22 @@ def main() -> None:
         "--fps", type=int, default=30,
         help="Frames per second for --record output (default: 30)",
     )
+    parser.add_argument(
+        "--batch", type=int, default=None, metavar="N",
+        help="Run N headless simulations with sequential seeds and print a comparison table",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="Random seed for reproducibility (batch: seed for run 0, incremented per run)",
+    )
     args = parser.parse_args()
 
-    model = BeeColonyModel()
+    if args.batch is not None:
+        steps = args.steps if args.steps is not None else DEFAULT_STEPS
+        _run_batch(args.batch, steps, args.seed)
+        return
+
+    model = BeeColonyModel(seed=args.seed)
 
     if args.record:
         from .visualization import record_visualization
@@ -37,6 +51,8 @@ def main() -> None:
         steps = args.steps if args.steps is not None else DEFAULT_STEPS
         for _ in range(steps):
             model.step()
+            if not model.running:
+                break
         _print_stats(model)
     else:
         from .visualization import run_visualization
@@ -44,18 +60,18 @@ def main() -> None:
 
 
 def _print_stats(model: BeeColonyModel) -> None:
-    print("\n── Colony state ──────────────────────────────────────")
+    print("\n-- Colony state ---------------------------------------")
     print(f"  Steps run :  {model.schedule.steps}")
     print(f"  Nectar    :  {model.hive.nectar:.1f}")
     print(f"  Brood     :  {model.hive.brood_count}")
     print(f"  Nurses    :  {model.nurse_count}")
     print(f"  Foragers  :  {model.forager_count}")
     print(f"  Scouts    :  {model.scout_count}")
-    print("──────────────────────────────────────────────────────\n")
+    print("------------------------------------------------------\n")
 
     discoveries = sorted(model.patch_discoveries, key=lambda d: d["step"])
     total = len(model.flower_patches)
-    print(f"\n── Patch discoveries ({len(discoveries)}/{total} found) ──")
+    print(f"\n-- Patch discoveries ({len(discoveries)}/{total} found) --")
 
     # build lookup: patch_pos -> first dance log entry (for attaching recruit chains)
     dance_chains = {e["patch_pos"]: e for e in model.dance_log}
@@ -81,6 +97,51 @@ def _print_stats(model: BeeColonyModel) -> None:
     if not data.empty:
         print(data.tail(10).to_string())
         print()
+
+
+def _run_batch(n_runs: int, steps: int, base_seed: int | None) -> None:
+    rows = []
+    for i in range(n_runs):
+        seed = (base_seed + i) if base_seed is not None else i
+        model = BeeColonyModel(seed=seed)
+        for _ in range(steps):
+            model.step()
+            if not model.running:
+                break
+        found = len(model.patch_discoveries)
+        total = len(model.flower_patches)
+        rows.append({
+            "run":          i + 1,
+            "seed":         seed,
+            "steps":        model.schedule.steps,
+            "nectar":       round(model.hive.nectar, 1),
+            "nurses":       model.nurse_count,
+            "foragers":     model.forager_count,
+            "scouts":       model.scout_count,
+            "patches_found": f"{found}/{total}",
+            "_found_int":   found,
+        })
+
+    headers = ["Run", "Seed", "Steps", "Nectar", "Nurses", "Foragers", "Scouts", "Patches"]
+    widths   = [4,    6,      6,       8,        7,        9,          7,        10]
+    sep = "  "
+    header_line = sep.join(h.ljust(w) for h, w in zip(headers, widths))
+    print(f"\n-- Batch results ({n_runs} runs x {steps} steps) --------------")
+    print(header_line)
+    print("-" * len(header_line))
+    for row in rows:
+        vals = [row["run"], row["seed"], row["steps"], row["nectar"],
+                row["nurses"], row["foragers"], row["scouts"], row["patches_found"]]
+        print(sep.join(str(v).ljust(w) for v, w in zip(vals, widths)))
+
+    print()
+    for key, label in [("nectar", "Nectar"), ("_found_int", "Patches found")]:
+        nums = [r[key] for r in rows]
+        mean = statistics.mean(nums)
+        lo, hi = min(nums), max(nums)
+        std_str = f"  std={statistics.stdev(nums):.2f}" if n_runs > 1 else ""
+        print(f"  {label:<14} mean={mean:.1f}{std_str}  min={lo}  max={hi}")
+    print()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 from enum import Enum, auto
 
-from ..config import SCOUT_MAX_ENERGY, FORAGER_ENERGY_COST_PER_STEP
+from ..config import SCOUT_MAX_ENERGY, FORAGER_ENERGY_COST_PER_STEP, SMELL_RADIUS
 from .base import BeeAgent
 
 
@@ -40,7 +40,7 @@ class ScoutAgent(BeeAgent):
 
     def _step_scouting(self) -> None:
         self._biased_move()
-        patch = self.model.get_patch_at(self.pos)
+        patch = self.model.get_patch_near(self.pos, SMELL_RADIUS)
         if patch and not patch.is_depleted:
             self.model.record_patch_discovery(patch, "scout")
             self.target_patch = patch

@@ -50,12 +50,4 @@ class NurseAgent(BeeAgent):
         self.model.nurse_count -= 1
 
     def _become_forager(self) -> None:
-        from .forager import ForagerAgent  # local import avoids circular dependency
-
-        forager = ForagerAgent(self.model)
-        self.model.grid.place_agent(forager, self.model.hive.pos)
-        self.model.schedule.add(forager)
-        self.model.schedule.remove(self)
-        self.model.nurse_count -= 1
-        self.model.forager_count += 1
-        # Note: nurse was never placed on the grid, so no grid.remove_agent needed.
+        self.model.promote_nurse_to_forager(self)
