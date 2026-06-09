@@ -62,6 +62,13 @@ class _GridRenderer:
         ax.plot(hx + 0.5, hy + 0.9, "*", color=_QUEEN_COLOR,
                 markersize=11, zorder=6, markeredgecolor="black", markeredgewidth=0.4)
 
+        self._ph_im = ax.imshow(
+            np.zeros((model.height, model.width), dtype=np.float32),
+            origin="lower", extent=[0, model.width, 0, model.height],
+            cmap="YlOrRd", vmin=0, vmax=0.4, alpha=0.4, zorder=1,
+            interpolation="bilinear",
+        )
+
         self._flower_circles = []
         for patch in model.flower_patches:
             px, py = patch.pos
@@ -89,6 +96,12 @@ class _GridRenderer:
         self._scout_excl: list = []
 
     def draw(self, model) -> None:
+        if model.use_pheromones:
+            self._ph_im.set_data(model.pheromones.T)
+            self._ph_im.set_visible(True)
+        else:
+            self._ph_im.set_visible(False)
+
         for circle, patch in zip(self._flower_circles, self._flower_patches):
             r = 0.15 + 0.45 * (patch.nectar / patch.max_nectar if patch.max_nectar else 0)
             circle.set_radius(r)
@@ -275,8 +288,37 @@ class _StatsRenderer:
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
+def _startup_screen() -> bool:
+    result = [True]
+    fig = plt.figure(figsize=(5, 3.2))
+    fig.patch.set_facecolor("#1a1a2e")
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_facecolor("#1a1a2e")
+    ax.set_axis_off()
+    ax.text(0.5, 0.82, "Bee Colony Simulation", transform=ax.transAxes,
+            ha="center", va="center", color="white", fontsize=14, fontweight="bold")
+    ax.text(0.5, 0.62, "Wybierz tryb symulacji:", transform=ax.transAxes,
+            ha="center", va="center", color="#aaaaaa", fontsize=10)
+
+    ax_ph  = fig.add_axes([0.08, 0.12, 0.38, 0.28])
+    ax_nph = fig.add_axes([0.54, 0.12, 0.38, 0.28])
+    btn_ph  = mwidgets.Button(ax_ph,  "Z feromonami",  color="#1a3a1a", hovercolor="#2a5a2a")
+    btn_nph = mwidgets.Button(ax_nph, "Bez feromonów", color="#2a2a4a", hovercolor="#3a3a6a")
+    btn_ph.label.set_color("white")
+    btn_nph.label.set_color("white")
+
+    def _pick_ph(_):  result[0] = True;  plt.close(fig)
+    def _pick_no(_):  result[0] = False; plt.close(fig)
+    btn_ph.on_clicked(_pick_ph)
+    btn_nph.on_clicked(_pick_no)
+    plt.show(block=True)
+    return result[0]
+
+
 def run_visualization(model, steps: int) -> None:
     """Live display. Space = pause/resume."""
+    model.use_pheromones = _startup_screen()
+
     fig, (ax_left, ax_grid, ax_stats) = plt.subplots(
         1, 3, figsize=(15, 6.3),
         gridspec_kw={"width_ratios": [0.5, 2, 1]},

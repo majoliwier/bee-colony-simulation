@@ -39,7 +39,7 @@ class ScoutAgent(BeeAgent):
             self._step_returning()
 
     def _step_scouting(self) -> None:
-        self._random_move()
+        self._biased_move()
         patch = self.model.get_patch_at(self.pos)
         if patch and not patch.is_depleted:
             self.model.record_patch_discovery(patch, "scout")

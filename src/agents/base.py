@@ -27,6 +27,19 @@ class BeeAgent(mesa.Agent):
         )
         self.model.grid.move_agent(self, self.random.choice(neighbors))
 
+    def _biased_move(self) -> None:
+        if not self.model.use_pheromones:
+            self._random_move()
+            return
+        from ..config import PHEROMONE_BIAS
+        neighbors = self.model.grid.get_neighborhood(
+            self.pos, moore=True, include_center=False
+        )
+        ph = self.model.pheromones
+        weights = [PHEROMONE_BIAS * float(ph[nx, ny]) + (1.0 - PHEROMONE_BIAS)
+                   for nx, ny in neighbors]
+        self.model.grid.move_agent(self, self.random.choices(neighbors, weights=weights)[0])
+
     def _move_toward(self, target: tuple) -> None:
         cx, cy = self.pos
         tx, ty = target

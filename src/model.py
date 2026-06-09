@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 from mesa import Model
 from mesa.time import RandomActivation
 from mesa.space import MultiGrid
@@ -12,6 +13,7 @@ from .config import (
     NUM_FLOWER_PATCHES,
     PATCH_MAX_NECTAR, PATCH_REGEN_RATE, PATCH_QUALITY_RANGE, MIN_PATCH_DISTANCE,
     WAGGLE_RECRUIT_MAX, WAGGLE_PROFITABILITY_SCALE,
+    PHEROMONE_DECAY, PHEROMONE_DIFFUSION,
 )
 from .agents.queen import QueenAgent
 from .agents.nurse import NurseAgent
@@ -60,6 +62,9 @@ class BeeColonyModel(Model):
         self.scout_count: int = 0
 
         # first discovery per patch (used internally)
+        self.use_pheromones: bool = True
+        self.pheromones: np.ndarray = np.zeros((width, height), dtype=np.float32)
+
         self.patch_discoveries: list[dict] = []
         self._discovered_patches: set[tuple] = set()
 
@@ -83,6 +88,15 @@ class BeeColonyModel(Model):
     # ── Per-step logic ───────────────────────────────────────────────────────
 
     def step(self) -> None:
+        if (self.hive.nectar <= 0
+                and self.forager_count == 0
+                and self.nurse_count == 0):
+            self.running = False
+            return
+
+        if self.use_pheromones:
+            self._update_pheromones()
+
         new_nurses = self.hive.hatch(self.schedule.steps)
         for _ in range(new_nurses):
             nurse = NurseAgent(self)
@@ -94,6 +108,21 @@ class BeeColonyModel(Model):
 
         self.datacollector.collect(self)
         self.schedule.step()
+
+    # ── Pheromone CA ─────────────────────────────────────────────────────────
+
+    def _update_pheromones(self) -> None:
+        ph = self.pheromones
+        w, h = ph.shape
+        padded = np.pad(ph, 1, mode='constant')
+        neighbor_avg = (
+            padded[0:w,   0:h]   + padded[0:w,   1:h+1] + padded[0:w,   2:h+2] +
+            padded[1:w+1, 0:h]   +                         padded[1:w+1, 2:h+2] +
+            padded[2:w+2, 0:h]   + padded[2:w+2, 1:h+1] + padded[2:w+2, 2:h+2]
+        ) / 8.0
+        # Laplacian diffusion: cell keeps (1-rate) of its value, gains rate * neighbour_avg
+        ph[:] = (ph * (1.0 - PHEROMONE_DIFFUSION) + PHEROMONE_DIFFUSION * neighbor_avg) * PHEROMONE_DECAY
+        np.clip(ph, 0.0, 1.0, out=ph)
 
     # ── Waggle dance ─────────────────────────────────────────────────────────
 

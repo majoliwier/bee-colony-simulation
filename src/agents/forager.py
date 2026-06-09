@@ -3,6 +3,7 @@ from enum import Enum, auto
 from ..config import (
     FORAGER_REST_DURATION, FORAGER_LOAD_CAPACITY, COLLECTING_STEPS,
     FORAGER_MAX_ENERGY, FORAGER_ENERGY_COST_PER_STEP,
+    TRAIL_DEPOSIT_STRENGTH, WAGGLE_PROFITABILITY_SCALE,
 )
 from .base import BeeAgent
 
@@ -69,7 +70,7 @@ class ForagerAgent(BeeAgent):
             self.state = ForagerState.SCOUTING
 
     def _step_scouting(self) -> None:
-        self._random_move()
+        self._biased_move()
         patch = self.model.get_patch_at(self.pos)
         if patch and not patch.is_depleted:
             self.model.record_patch_discovery(patch, "forager")
@@ -112,6 +113,11 @@ class ForagerAgent(BeeAgent):
             self.target_patch = None
             self.state = ForagerState.RESTING
         else:
+            if self.target_patch is not None and self.nectar_load > 0:
+                prof = self.model._patch_profitability(self.target_patch)
+                deposit = min(1.0, prof / WAGGLE_PROFITABILITY_SCALE) * TRAIL_DEPOSIT_STRENGTH
+                x, y = self.pos
+                self.model.pheromones[x, y] = min(1.0, self.model.pheromones[x, y] + deposit)
             self._move_toward(self.model.hive.pos)
 
     # ── Lifecycle ────────────────────────────────────────────────────────────

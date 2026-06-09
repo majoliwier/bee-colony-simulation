@@ -48,6 +48,12 @@ WAGGLE_PROFITABILITY_SCALE = 1.0 # profitability at which max recruits are trigg
 INITIAL_SCOUTS = 5
 SCOUT_MAX_ENERGY = 300           # scouts fly more (always random walk)
 
+# ── Pheromone (Cellular Automaton) ──────────────────────────────────────────
+PHEROMONE_DECAY        = 0.997  # fraction retained each step (trail half-life ~230 steps along path)
+PHEROMONE_DIFFUSION    = 0.06   # fraction spread to Moore neighbours (Laplacian, conservative)
+TRAIL_DEPOSIT_STRENGTH = 0.4    # deposit per step while returning (scales with profitability)
+PHEROMONE_BIAS         = 0.85   # weight of pheromone vs random in scouting movement
+
 # ── Simulation / Visualisation ───────────────────────────────────────────────
 DEFAULT_STEPS = 300
 VIZ_UPDATE_INTERVAL = 3  # redraw display every N steps
