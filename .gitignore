@@ -219,3 +219,5 @@ docs/
 .claude/
 PROGRESS.md
 CLAUDE.md
+rl_forager_mvp/models/*.zip
+!rl_forager_mvp/models/ppo_forager_colony.zip

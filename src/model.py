@@ -15,10 +15,12 @@ from .config import (
     PATCH_MAX_NECTAR, PATCH_REGEN_RATE, PATCH_QUALITY_RANGE, MIN_PATCH_DISTANCE, PATCH_LIFETIME_NECTAR,
     WAGGLE_RECRUIT_MAX, WAGGLE_PROFITABILITY_SCALE, WAGGLE_ANGLE_NOISE,
     PHEROMONE_DECAY, PHEROMONE_DIFFUSION,
+    USE_RL_FORAGERS,
 )
 from .agents.queen import QueenAgent
 from .agents.nurse import NurseAgent
 from .agents.forager import ForagerAgent, ForagerState
+from .agents.rl_forager import RLForagerAgent
 from .agents.scout import ScoutAgent
 from .environment.hive import Hive
 from .environment.flower_patch import FlowerPatch
@@ -44,6 +46,7 @@ class BeeColonyModel(Model):
         initial_foragers: int = INITIAL_FORAGERS,
         initial_scouts: int = INITIAL_SCOUTS,
         num_patches: int = NUM_FLOWER_PATCHES,
+        use_rl_foragers: bool = USE_RL_FORAGERS,
         seed: int | None = None,
     ):
         if width < 3 or height < 3:
@@ -64,6 +67,8 @@ class BeeColonyModel(Model):
         self.nurse_count: int = 0
         self.forager_count: int = 0
         self.scout_count: int = 0
+        self.use_rl_foragers = use_rl_foragers
+        self._forager_cls = RLForagerAgent if use_rl_foragers else ForagerAgent
 
         # first discovery per patch (used internally)
         self.use_pheromones: bool = True
@@ -113,18 +118,15 @@ class BeeColonyModel(Model):
         self.datacollector.collect(self)
         self.schedule.step()
 
-    # ── Pheromone CA ─────────────────────────────────────────────────────────
-
     def _update_pheromones(self) -> None:
         ph = self.pheromones
         w, h = ph.shape
-        padded = np.pad(ph, 1, mode='constant')
+        padded = np.pad(ph, 1, mode="constant")
         neighbor_avg = (
             padded[0:w,   0:h]   + padded[0:w,   1:h+1] + padded[0:w,   2:h+2] +
             padded[1:w+1, 0:h]   +                         padded[1:w+1, 2:h+2] +
             padded[2:w+2, 0:h]   + padded[2:w+2, 1:h+1] + padded[2:w+2, 2:h+2]
         ) / 8.0
-        # Laplacian diffusion: cell keeps (1-rate) of its value, gains rate * neighbour_avg
         ph[:] = (ph * (1.0 - PHEROMONE_DIFFUSION) + PHEROMONE_DIFFUSION * neighbor_avg) * PHEROMONE_DECAY
         np.clip(ph, 0.0, 1.0, out=ph)
 
@@ -201,7 +203,7 @@ class BeeColonyModel(Model):
         return (tx, ty)
 
     def promote_nurse_to_forager(self, nurse: NurseAgent) -> None:
-        forager = ForagerAgent(self)
+        forager = self._forager_cls(self)
         self.grid.place_agent(forager, self.hive.pos)
         self.schedule.add(forager)
         self.schedule.remove(nurse)
@@ -257,7 +259,7 @@ class BeeColonyModel(Model):
         self.nurse_count = n_nurses
 
         for _ in range(n_foragers):
-            forager = ForagerAgent(self)
+            forager = self._forager_cls(self)
             self.grid.place_agent(forager, HIVE_POS)
             self.schedule.add(forager)
         self.forager_count = n_foragers
