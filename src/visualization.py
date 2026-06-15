@@ -11,9 +11,11 @@ from .agents.scout import ScoutAgent, ScoutState
 from .config import VIZ_UPDATE_INTERVAL, MAX_NECTAR_STORES, DEFAULT_STEPS
 
 # ── Colour palette ────────────────────────────────────────────────────────────
-_HIVE_COLOR  = (1.0, 0.85, 0.0)
-_PATCH_COLOR = (0.18, 0.65, 0.18)
-_BG_COLOR    = (0.93, 0.93, 0.93)
+_HIVE_COLOR         = (1.0, 0.85, 0.0)
+_PATCH_COLOR        = (0.18, 0.65, 0.18)
+_PATCH_COLOR_EMPTY  = (0.60, 0.60, 0.60)   # temporarily depleted — recovers
+_PATCH_COLOR_DEAD   = (0.28, 0.28, 0.28)   # permanently exhausted
+_BG_COLOR           = (0.93, 0.93, 0.93)
 
 _NURSE_COLOR  = "dodgerblue"
 _QUEEN_COLOR  = "gold"
@@ -62,6 +64,13 @@ class _GridRenderer:
         ax.plot(hx + 0.5, hy + 0.9, "*", color=_QUEEN_COLOR,
                 markersize=11, zorder=6, markeredgecolor="black", markeredgewidth=0.4)
 
+        self._ph_im = ax.imshow(
+            np.zeros((model.height, model.width), dtype=np.float32),
+            origin="lower", extent=[0, model.width, 0, model.height],
+            cmap="YlOrRd", vmin=0, vmax=0.4, alpha=0.4, zorder=1,
+            interpolation="bilinear",
+        )
+
         self._flower_circles = []
         for patch in model.flower_patches:
             px, py = patch.pos
@@ -89,9 +98,23 @@ class _GridRenderer:
         self._scout_excl: list = []
 
     def draw(self, model) -> None:
+        if model.use_pheromones:
+            self._ph_im.set_data(model.pheromones.T)
+            self._ph_im.set_visible(True)
+        else:
+            self._ph_im.set_visible(False)
+
         for circle, patch in zip(self._flower_circles, self._flower_patches):
-            r = 0.15 + 0.45 * (patch.nectar / patch.max_nectar if patch.max_nectar else 0)
-            circle.set_radius(r)
+            if patch.exhausted:
+                circle.set_radius(0.08)
+                circle.set_color(_PATCH_COLOR_DEAD)
+            elif patch.is_depleted:
+                circle.set_radius(0.12)
+                circle.set_color(_PATCH_COLOR_EMPTY)
+            else:
+                r = 0.15 + 0.45 * (patch.nectar / patch.max_nectar if patch.max_nectar else 0)
+                circle.set_radius(r)
+                circle.set_color(_PATCH_COLOR)
 
         hx, hy = self._hx, self._hy
         nurses  = model.nurse_count
@@ -148,20 +171,24 @@ class _GridRenderer:
         ax_x, ax_y, ax_u, ax_v, ax_c = [], [], [], [], []
         returning_scouts = []
         for agent in model.schedule.agents:
-            if (isinstance(agent, ForagerAgent) and agent.pos is not None
-                    and agent.state == ForagerState.FLYING_TO_PATCH
-                    and agent.target_patch is not None):
-                x, y = agent.pos
-                target = agent.target_patch.pos
-                dx, dy = target[0] - x, target[1] - y
-                dist = (dx * dx + dy * dy) ** 0.5
-                if dist == 0:
-                    continue
-                ax_x.append(x + 0.5)
-                ax_y.append(y + 0.5)
-                ax_u.append(dx / dist * 0.6)
-                ax_v.append(dy / dist * 0.6)
-                ax_c.append(_FORAGER_COLORS[ForagerState.FLYING_TO_PATCH])
+            if isinstance(agent, ForagerAgent) and agent.pos is not None:
+                if agent.state == ForagerState.FLYING_TO_PATCH and agent.target_patch is not None:
+                    target = agent.target_patch.pos
+                elif agent.state == ForagerState.RETURNING:
+                    target = model.hive.pos
+                else:
+                    target = None
+                if target is not None:
+                    x, y = agent.pos
+                    dx, dy = target[0] - x, target[1] - y
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    if dist == 0:
+                        continue
+                    ax_x.append(x + 0.5)
+                    ax_y.append(y + 0.5)
+                    ax_u.append(dx / dist * 0.6)
+                    ax_v.append(dy / dist * 0.6)
+                    ax_c.append(_FORAGER_COLORS[agent.state])
             elif (isinstance(agent, ScoutAgent) and agent.pos is not None
                     and agent.state == ScoutState.RETURNING):
                 returning_scouts.append(agent.pos)
@@ -271,8 +298,37 @@ class _StatsRenderer:
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
+def _startup_screen() -> bool:
+    result = [True]
+    fig = plt.figure(figsize=(5, 3.2))
+    fig.patch.set_facecolor("#1a1a2e")
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_facecolor("#1a1a2e")
+    ax.set_axis_off()
+    ax.text(0.5, 0.82, "Bee Colony Simulation", transform=ax.transAxes,
+            ha="center", va="center", color="white", fontsize=14, fontweight="bold")
+    ax.text(0.5, 0.62, "Wybierz tryb symulacji:", transform=ax.transAxes,
+            ha="center", va="center", color="#aaaaaa", fontsize=10)
+
+    ax_ph  = fig.add_axes([0.08, 0.12, 0.38, 0.28])
+    ax_nph = fig.add_axes([0.54, 0.12, 0.38, 0.28])
+    btn_ph  = mwidgets.Button(ax_ph,  "Z feromonami",  color="#1a3a1a", hovercolor="#2a5a2a")
+    btn_nph = mwidgets.Button(ax_nph, "Bez feromonów", color="#2a2a4a", hovercolor="#3a3a6a")
+    btn_ph.label.set_color("white")
+    btn_nph.label.set_color("white")
+
+    def _pick_ph(_):  result[0] = True;  plt.close(fig)
+    def _pick_no(_):  result[0] = False; plt.close(fig)
+    btn_ph.on_clicked(_pick_ph)
+    btn_nph.on_clicked(_pick_no)
+    plt.show(block=True)
+    return result[0]
+
+
 def run_visualization(model, steps: int) -> None:
     """Live display. Space = pause/resume."""
+    model.use_pheromones = _startup_screen()
+
     fig, (ax_left, ax_grid, ax_stats) = plt.subplots(
         1, 3, figsize=(15, 6.3),
         gridspec_kw={"width_ratios": [0.5, 2, 1]},
@@ -417,8 +473,10 @@ def _title(model) -> str:
 
 def _grid_legend() -> list:
     return [
-        mpatches.Patch(facecolor=_HIVE_COLOR,   edgecolor="k", label="Hive"),
-        mpatches.Patch(facecolor=_PATCH_COLOR,               label="Flower patch"),
+        mpatches.Patch(facecolor=_HIVE_COLOR,        edgecolor="k", label="Hive"),
+        mpatches.Patch(facecolor=_PATCH_COLOR,                    label="Flower patch"),
+        mpatches.Patch(facecolor=_PATCH_COLOR_EMPTY,              label="Patch (recovering)"),
+        mpatches.Patch(facecolor=_PATCH_COLOR_DEAD,               label="Patch (exhausted)"),
         plt.Line2D([0], [0], marker="*", color="w", markerfacecolor=_QUEEN_COLOR,
                    markersize=10, label="Queen"),
         mpatches.Patch(facecolor=_NURSE_COLOR,               label="Nurse"),

@@ -32,10 +32,13 @@ PATCH_MAX_NECTAR = 80.0
 PATCH_REGEN_RATE = 0.3          # nectar regenerated per step
 PATCH_QUALITY_RANGE = (0.5, 1.5)  # quality multiplier range (applied to collected nectar)
 MIN_PATCH_DISTANCE = 5           # allow patches closer to hive so early demos show activity
+PATCH_LIFETIME_NECTAR = 200.0    # total nectar a patch can ever yield before dying permanently
 
 # ── Forager energy / death ──────────────────────────────────────────────────
 FORAGER_MAX_ENERGY = 200         # steps of flight before exhaustion
 FORAGER_ENERGY_COST_PER_STEP = 1 # energy lost per step while not resting
+LOCAL_SEARCH_STEPS = 35          # random-walk steps after missing dance target; 0 → give up
+SMELL_RADIUS = 2                 # Chebyshev distance at which a bee can detect a flower patch
 
 # ── Nurse death ──────────────────────────────────────────────────────────────
 MAX_NURSE_AGE = 100              # fallback death age (should normally switch first)
@@ -43,10 +46,19 @@ MAX_NURSE_AGE = 100              # fallback death age (should normally switch fi
 # ── Waggle dance ─────────────────────────────────────────────────────────────
 WAGGLE_RECRUIT_MAX = 5           # max foragers recruited per dance
 WAGGLE_PROFITABILITY_SCALE = 1.0 # profitability at which max recruits are triggered (~close full patch)
+WAGGLE_ANGLE_NOISE = 0.25        # std dev of angular error in dance communication (radians, ~14°)
 
 # ── Scout ────────────────────────────────────────────────────────────────────
 INITIAL_SCOUTS = 5
 SCOUT_MAX_ENERGY = 300           # scouts fly more (always random walk)
+
+# ── Pheromone (Cellular Automaton) ──────────────────────────────────────────
+# Effective local retention per step = DECAY × (1 − DIFFUSION).
+# Half-life = log(0.5) / log(retention) ≈ 38 steps — long enough for ~1 forager round-trip.
+PHEROMONE_DECAY        = 0.997   # global decay fraction per step
+PHEROMONE_DIFFUSION    = 0.015   # fraction spread to Moore neighbours (Laplacian)
+TRAIL_DEPOSIT_STRENGTH = 0.6     # deposit per step on outbound flight (scales with profitability)
+PHEROMONE_BIAS         = 0.85    # weight of pheromone vs random in scouting movement
 
 # ── Simulation / Visualisation ───────────────────────────────────────────────
 DEFAULT_STEPS = 300
