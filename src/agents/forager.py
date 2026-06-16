@@ -173,7 +173,7 @@ class ForagerAgent(BeeAgent):
     def _deposit_trail(self) -> None:
         if self.target_patch is None or not self.model.use_pheromones:
             return
-        deposit = self.model._profitability_ratio(self.target_patch) * TRAIL_DEPOSIT_STRENGTH
+        deposit = self.model._profitability_ratio(self.target_patch) * self.model.trail_deposit_strength
         x, y = self.pos
         self.model.pheromones[x, y] = min(1.0, self.model.pheromones[x, y] + deposit)
 
@@ -189,7 +189,7 @@ class ForagerAgent(BeeAgent):
         """
         if self.target_patch is None or not self.model.use_pheromones:
             return
-        halo = self.model._profitability_ratio(self.target_patch) * TRAIL_DEPOSIT_STRENGTH * 0.35
+        halo = self.model._profitability_ratio(self.target_patch) * self.model.trail_deposit_strength * 0.35
         if halo <= 0:
             return
         for nx, ny in self.model.grid.get_neighborhood(

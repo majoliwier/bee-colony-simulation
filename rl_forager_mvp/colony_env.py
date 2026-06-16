@@ -255,7 +255,7 @@ class BeeColonyForagerEnv(gym.Env):
         if patch is None:
             return
         x, y = pos
-        deposit = model._profitability_ratio(patch) * TRAIL_DEPOSIT_STRENGTH
+        deposit = model._profitability_ratio(patch) * model.trail_deposit_strength
         model.pheromones[x, y] = min(1.0, model.pheromones[x, y] + deposit)
 
     def _local_nectar_signal(self, x: int, y: int) -> float:

@@ -19,7 +19,7 @@ class EpisodeResult:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a trained RL forager.")
-    parser.add_argument("--model", default="rl_forager_mvp/models/ppo_forager.zip")
+    parser.add_argument("--model", default="rl_forager_mvp/models/ppo_forager_colony.zip")
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--seed", type=int, default=100)
     parser.add_argument("--grid-size", type=int, default=25)

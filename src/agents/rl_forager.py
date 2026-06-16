@@ -236,7 +236,7 @@ class RLForagerAgent(ForagerAgent):
     def _deposit_trail_at(self, pos: tuple[int, int]) -> None:
         if self.target_patch is None or not self.model.use_pheromones:
             return
-        deposit = self.model._profitability_ratio(self.target_patch) * TRAIL_DEPOSIT_STRENGTH
+        deposit = self.model._profitability_ratio(self.target_patch) * self.model.trail_deposit_strength
         x, y = pos
         self.model.pheromones[x, y] = min(1.0, self.model.pheromones[x, y] + deposit)
 

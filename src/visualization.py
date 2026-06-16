@@ -307,15 +307,15 @@ def choose_startup_mode() -> tuple[bool, bool]:
     ax.set_axis_off()
     ax.text(0.5, 0.82, "Bee Colony Simulation", transform=ax.transAxes,
             ha="center", va="center", color="white", fontsize=14, fontweight="bold")
-    ax.text(0.5, 0.62, "Wybierz tryb symulacji:", transform=ax.transAxes,
+    ax.text(0.5, 0.62, "Choose simulation mode:", transform=ax.transAxes,
             ha="center", va="center", color="#aaaaaa", fontsize=10)
 
     ax_nph = fig.add_axes([0.06, 0.12, 0.26, 0.28])
     ax_ph = fig.add_axes([0.37, 0.12, 0.26, 0.28])
     ax_rl = fig.add_axes([0.68, 0.12, 0.26, 0.28])
-    btn_nph = mwidgets.Button(ax_nph, "FSM bez feromonow", color="#2a2a4a", hovercolor="#3a3a6a")
-    btn_ph = mwidgets.Button(ax_ph, "FSM + feromony", color="#1a3a1a", hovercolor="#2a5a2a")
-    btn_rl = mwidgets.Button(ax_rl, "RL + feromony", color="#5a3a12", hovercolor="#80521a")
+    btn_nph = mwidgets.Button(ax_nph, "FSM no pheromones", color="#2a2a4a", hovercolor="#3a3a6a")
+    btn_ph = mwidgets.Button(ax_ph, "FSM + pheromones", color="#1a3a1a", hovercolor="#2a5a2a")
+    btn_rl = mwidgets.Button(ax_rl, "RL + pheromones", color="#5a3a12", hovercolor="#80521a")
     for btn in (btn_nph, btn_ph, btn_rl):
         btn.label.set_color("white")
 

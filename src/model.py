@@ -12,7 +12,9 @@ from .config import (
     HIVE_POS, INITIAL_NECTAR,
     INITIAL_NURSES, INITIAL_FORAGERS, INITIAL_SCOUTS,
     NUM_FLOWER_PATCHES,
+    NURSE_TO_FORAGER_AGE,
     PATCH_MAX_NECTAR, PATCH_REGEN_RATE, PATCH_QUALITY_RANGE, MIN_PATCH_DISTANCE, PATCH_LIFETIME_NECTAR,
+    TRAIL_DEPOSIT_STRENGTH,
     WAGGLE_RECRUIT_MAX, WAGGLE_PROFITABILITY_SCALE, WAGGLE_ANGLE_NOISE,
     PHEROMONE_DECAY, PHEROMONE_DIFFUSION,
     USE_RL_FORAGERS,
@@ -48,6 +50,8 @@ class BeeColonyModel(Model):
         num_patches: int = NUM_FLOWER_PATCHES,
         use_rl_foragers: bool = USE_RL_FORAGERS,
         seed: int | None = None,
+        nurse_to_forager_age: int = NURSE_TO_FORAGER_AGE,
+        trail_deposit_strength: float = TRAIL_DEPOSIT_STRENGTH,
     ):
         if width < 3 or height < 3:
             raise ValueError(f"Grid must be at least 3×3, got {width}×{height}.")
@@ -68,6 +72,8 @@ class BeeColonyModel(Model):
         self.forager_count: int = 0
         self.scout_count: int = 0
         self.use_rl_foragers = use_rl_foragers
+        self.nurse_to_forager_age: int = nurse_to_forager_age
+        self.trail_deposit_strength: float = trail_deposit_strength
         self._forager_cls = RLForagerAgent if use_rl_foragers else ForagerAgent
 
         # first discovery per patch (used internally)

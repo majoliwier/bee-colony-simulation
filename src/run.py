@@ -50,11 +50,17 @@ def main() -> None:
         action="store_true",
         help="Use PPO-controlled RL foragers instead of the default FSM foragers",
     )
+    parser.add_argument(
+        "--no-pheromones",
+        action="store_true",
+        help="Disable pheromone CA layer (pure random-walk scouting)",
+    )
     args = parser.parse_args()
 
     if args.batch is not None:
         steps = args.steps if args.steps is not None else DEFAULT_STEPS
-        _run_batch(args.batch, steps, args.seed, args.rl_foragers)
+        _run_batch(args.batch, steps, args.seed, args.rl_foragers,
+                   use_pheromones=not args.no_pheromones)
         return
 
     selected_pheromones = None
@@ -65,7 +71,9 @@ def main() -> None:
         selected_pheromones, selected_rl_foragers = choose_startup_mode()
 
     model = BeeColonyModel(seed=args.seed, use_rl_foragers=selected_rl_foragers)
-    if selected_pheromones is not None:
+    if args.no_pheromones:
+        model.use_pheromones = False
+    elif selected_pheromones is not None:
         model.use_pheromones = selected_pheromones
 
     if args.record:
@@ -129,11 +137,13 @@ def _print_stats(model: BeeColonyModel) -> None:
         print()
 
 
-def _run_batch(n_runs: int, steps: int, base_seed: int | None, use_rl_foragers: bool) -> None:
+def _run_batch(n_runs: int, steps: int, base_seed: int | None, use_rl_foragers: bool,
+               use_pheromones: bool = True) -> None:
     rows = []
     for i in range(n_runs):
         seed = (base_seed + i) if base_seed is not None else i
         model = BeeColonyModel(seed=seed, use_rl_foragers=use_rl_foragers)
+        model.use_pheromones = use_pheromones
         for _ in range(steps):
             model.step()
             if not model.running:
@@ -158,8 +168,9 @@ def _run_batch(n_runs: int, steps: int, base_seed: int | None, use_rl_foragers: 
     widths = [4, 6, 6, 8, 7, 9, 7, 10]
     sep = "  "
     header_line = sep.join(h.ljust(w) for h, w in zip(headers, widths))
-    ai_label = "RL/PPO" if use_rl_foragers else "FSM"
-    print(f"\n-- Batch results ({n_runs} runs x {steps} steps, foragers={ai_label}) --")
+    ai_label  = "RL/PPO" if use_rl_foragers else "FSM"
+    ph_label  = "pheromones=ON" if use_pheromones else "pheromones=OFF"
+    print(f"\n-- Batch results ({n_runs} runs x {steps} steps, foragers={ai_label}, {ph_label}) --")
     print(header_line)
     print("-" * len(header_line))
     for row in rows:
