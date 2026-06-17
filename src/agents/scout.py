@@ -63,7 +63,6 @@ class ScoutAgent(BeeAgent):
         self.model.grid.remove_agent(self)
         self.model.schedule.remove(self)
         self.model.scout_count -= 1
-        # Immediately replace with a fresh scout so the colony always has INITIAL_SCOUTS.
         from ..config import INITIAL_SCOUTS, HIVE_POS
         if self.model.scout_count < INITIAL_SCOUTS:
             replacement = ScoutAgent(self.model)

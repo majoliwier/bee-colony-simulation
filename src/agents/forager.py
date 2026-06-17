@@ -82,7 +82,6 @@ class ForagerAgent(BeeAgent):
                 self._collect_timer = 0
                 self.state = ForagerState.COLLECTING
             else:
-                # smelled patch nearby — fly directly to it (no dance noise)
                 self.state = ForagerState.FLYING_TO_PATCH
 
     def _step_flying_to_patch(self) -> None:
@@ -94,9 +93,7 @@ class ForagerAgent(BeeAgent):
             self.state = ForagerState.SCOUTING
             return
 
-        # Phase 1 — pheromone-guided search after missing the dance landing zone.
-        # Uses _biased_move so accumulated trails from previous visitors guide the
-        # bee toward the patch — the stronger the trail, the easier the find.
+        # Pheromone-guided local search after missing the dance landing zone.
         if self._local_search_remaining > 0:
             self._local_search_remaining -= 1
             self._biased_move()
@@ -105,18 +102,16 @@ class ForagerAgent(BeeAgent):
                 self.model.record_patch_discovery(patch, "forager")
                 self._scout_log_entry = None
                 self.target_patch = patch
-                self._local_search_remaining = 0  # exit local search
+                self._local_search_remaining = 0
                 if self.pos == patch.pos:
                     self._collect_timer = 0
                     self.state = ForagerState.COLLECTING
-                # else: stay in FLYING_TO_PATCH; Phase 3 will fly directly to patch
             elif self._local_search_remaining == 0:
-                # Search exhausted — return to hive empty
                 self.target_patch = None
                 self.state = ForagerState.RETURNING
             return
 
-        # Phase 2 — fly to the dance-encoded approximate landing zone.
+        # Fly to the dance-encoded approximate landing zone first.
         if self.dance_target_pos is not None:
             if self.pos == self.dance_target_pos:
                 self.dance_target_pos = None
@@ -127,7 +122,7 @@ class ForagerAgent(BeeAgent):
                     self._collect_timer = 0
                     self.state = ForagerState.COLLECTING
                 else:
-                    # Missed — begin local random search from approximate area
+                    # Dance noise caused overshoot; begin local search.
                     self._scout_log_entry = None
                     self._local_search_remaining = LOCAL_SEARCH_STEPS
             else:
@@ -135,7 +130,7 @@ class ForagerAgent(BeeAgent):
                 self._deposit_trail()
             return
 
-        # Phase 3 — direct flight to patch (no dance noise involved).
+        # Direct flight to known patch position.
         if self.pos == self.target_patch.pos:
             if self._scout_log_entry is not None:
                 self._scout_log_entry["arrived_step"] = self.model.schedule.steps
@@ -151,8 +146,8 @@ class ForagerAgent(BeeAgent):
         if self.target_patch and not self.target_patch.is_depleted:
             collected = self.target_patch.collect(_NECTAR_PER_COLLECT_STEP)
             self.nectar_load = min(FORAGER_LOAD_CAPACITY, self.nectar_load + collected)
-            self._deposit_trail()             # full-strength source marker at patch
-            self._broadcast_patch_marker()    # weaker halo at neighbours — detectable from dance landing zone
+            self._deposit_trail()
+            self._broadcast_patch_marker()
 
         patch_done = self.target_patch is None or self.target_patch.is_depleted
         if self._collect_timer >= COLLECTING_STEPS or patch_done:
@@ -162,7 +157,7 @@ class ForagerAgent(BeeAgent):
         if self.pos == self.model.hive.pos:
             self.model.hive.deposit(self.nectar_load)
             self.nectar_load = 0.0
-            self.energy = float(FORAGER_MAX_ENERGY)  # refuel at hive (bees eat stored honey)
+            self.energy = float(FORAGER_MAX_ENERGY)
             if self.target_patch is not None and not self.target_patch.exhausted:
                 self.model.perform_waggle_dance(self.target_patch, found_step=self._found_at_step)
             self.target_patch = None
@@ -178,15 +173,9 @@ class ForagerAgent(BeeAgent):
         self.model.pheromones[x, y] = min(1.0, self.model.pheromones[x, y] + deposit)
 
     def _broadcast_patch_marker(self) -> None:
-        """Deposit a weaker halo at the 8 cells surrounding the patch.
+        # Diffusion alone is too slow to spread the signal to a dance landing zone
+        # 2-4 cells away, so deposit a weaker halo around the patch directly.
 
-        Without this, the patch pheromone sits only at patch.pos and diffuses
-        too slowly (diffusion=0.015) to be detectable from dance_target_pos
-        which can be 2-4 cells away.  A local halo lets biased_move pull the
-        bee toward the patch even when the dance landing zone misses by 2-3 cells,
-        and the signal grows with each collection visit — the user's intuition
-        that 'more bees visited = stronger trail = better guidance'.
-        """
         if self.target_patch is None or not self.model.use_pheromones:
             return
         halo = self.model._profitability_ratio(self.target_patch) * self.model.trail_deposit_strength * 0.35

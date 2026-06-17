@@ -27,7 +27,7 @@ class FlowerPatch:
         self._lifetime_budget = lifetime_nectar   # total raw nectar this patch can ever give
         self._total_collected = 0.0
         self.exhausted = False                    # True once lifetime_budget is spent
-        self.nectar = max_nectar * 0.8            # start mostly full
+        self.nectar = max_nectar * 0.8
 
     def collect(self, requested: float) -> float:
         """

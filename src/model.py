@@ -76,14 +76,12 @@ class BeeColonyModel(Model):
         self.trail_deposit_strength: float = trail_deposit_strength
         self._forager_cls = RLForagerAgent if use_rl_foragers else ForagerAgent
 
-        # first discovery per patch (used internally)
         self.use_pheromones: bool = True
         self.pheromones: np.ndarray = np.zeros((width, height), dtype=np.float32)
 
         self.patch_discoveries: list[dict] = []
         self._discovered_patches: set[tuple] = set()
 
-        # first waggle dance per patch: [{found_step, finder, patch_pos, quality, recruits: [{forager_id, arrived_step}]}]
         self.dance_log: list[dict] = []
         self._danced_patches: set[tuple] = set()
 

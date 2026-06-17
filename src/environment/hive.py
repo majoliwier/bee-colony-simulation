@@ -14,8 +14,7 @@ class Hive:
     def __init__(self, pos: tuple, initial_nectar: float):
         self.pos = pos
         self.nectar = initial_nectar
-        # Each entry is the simulation step at which that egg hatches into a nurse.
-        self._brood: list[int] = []
+        self._brood: list[int] = []  # hatch-step timestamps
 
     # ── Nectar ───────────────────────────────────────────────────────────────
 
