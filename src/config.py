@@ -25,6 +25,9 @@ INITIAL_FORAGERS = 8
 FORAGER_REST_DURATION = 6    # steps spent resting in hive after each return
 FORAGER_LOAD_CAPACITY = 10.0  # max nectar a forager can carry
 COLLECTING_STEPS = 3          # steps the forager stays on a patch to fill its load
+USE_RL_FORAGERS = False       # False = FSM foragers, True = PPO-controlled foragers
+RL_FORAGER_MODEL_PATH = "rl_forager_mvp/models/ppo_forager_colony.zip"
+RL_FORAGER_REST_DURATION = 0  # PPO was trained without mandatory post-trip rest
 
 # ── Flower Patches ──────────────────────────────────────────────────────────
 NUM_FLOWER_PATCHES = 12          # more patches → foragers find them faster during random walk
@@ -37,7 +40,7 @@ PATCH_LIFETIME_NECTAR = 200.0    # total nectar a patch can ever yield before dy
 # ── Forager energy / death ──────────────────────────────────────────────────
 FORAGER_MAX_ENERGY = 200         # steps of flight before exhaustion
 FORAGER_ENERGY_COST_PER_STEP = 1 # energy lost per step while not resting
-LOCAL_SEARCH_STEPS = 35          # random-walk steps after missing dance target; 0 → give up
+LOCAL_SEARCH_STEPS = 35          # random-walk steps after missing dance target; 0 -> give up
 SMELL_RADIUS = 2                 # Chebyshev distance at which a bee can detect a flower patch
 
 # ── Nurse death ──────────────────────────────────────────────────────────────
@@ -46,18 +49,18 @@ MAX_NURSE_AGE = 100              # fallback death age (should normally switch fi
 # ── Waggle dance ─────────────────────────────────────────────────────────────
 WAGGLE_RECRUIT_MAX = 5           # max foragers recruited per dance
 WAGGLE_PROFITABILITY_SCALE = 1.0 # profitability at which max recruits are triggered (~close full patch)
-WAGGLE_ANGLE_NOISE = 0.25        # std dev of angular error in dance communication (radians, ~14°)
+WAGGLE_ANGLE_NOISE = 0.25        # std dev of angular error in dance communication (radians, ~14 deg)
 
 # ── Scout ────────────────────────────────────────────────────────────────────
 INITIAL_SCOUTS = 5
 SCOUT_MAX_ENERGY = 300           # scouts fly more (always random walk)
 
-# ── Pheromone (Cellular Automaton) ──────────────────────────────────────────
-# Effective local retention per step = DECAY × (1 − DIFFUSION).
-# Half-life = log(0.5) / log(retention) ≈ 38 steps — long enough for ~1 forager round-trip.
+# Pheromone (Cellular Automaton)
+# Effective local retention per step = DECAY * (1 - DIFFUSION).
+# Half-life is about 38 steps, long enough for roughly one forager round-trip.
 PHEROMONE_DECAY        = 0.997   # global decay fraction per step
-PHEROMONE_DIFFUSION    = 0.015   # fraction spread to Moore neighbours (Laplacian)
-TRAIL_DEPOSIT_STRENGTH = 0.6     # deposit per step on outbound flight (scales with profitability)
+PHEROMONE_DIFFUSION    = 0.015   # fraction spread to Moore neighbours
+TRAIL_DEPOSIT_STRENGTH = 0.6     # deposit per step on outbound flight
 PHEROMONE_BIAS         = 0.85    # weight of pheromone vs random in scouting movement
 
 # ── Simulation / Visualisation ───────────────────────────────────────────────

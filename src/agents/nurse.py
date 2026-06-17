@@ -41,7 +41,7 @@ class NurseAgent(BeeAgent):
 
     def _should_become_forager(self) -> bool:
         return (
-            self.age >= NURSE_TO_FORAGER_AGE
+            self.age >= self.model.nurse_to_forager_age
             or self.model.hive.nectar_deficit > self.forager_threshold
         )
 
